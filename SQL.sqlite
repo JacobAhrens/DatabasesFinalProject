@@ -1,0 +1,188 @@
+--#1
+--List all players who have played for 10 or more franchises
+.www
+SELECT 
+    P.nameFirst || ' ' || P.nameLast AS Name, 
+    COUNT(DISTINCT T.franchID) AS Franchises
+FROM PLAYER P, TEAM T, FRANCHISE F, APPEARANCES A
+WHERE P.playerID = A.playerID AND --Joins the player to franchise as "played for"
+    A.teamID = T.teamID AND 
+    T.franchID = F.franchID 
+GROUP BY P.playerID --Groups all instance of player into one row
+HAVING Franchises >= 10  --Selects the players that have 10+ different franchises
+ORDER BY Franchises DESC;
+
+--#2
+--List pitchers with most wins for all teams to win 100 or more games in a season
+.www
+SELECT
+    P.nameFirst || ' ' || P.nameLast AS Name,
+    PI.W AS "Pitcher Wins",
+    T.name AS Team,
+    T.Wins || '-' || T.Losses AS "Team Record"
+FROM PLAYER P, TEAM T, PITCHING PI
+WHERE P.playerID = PI.playerID AND --Join pitchers and teams
+    PI.teamID = T.teamID AND
+    PI.year = T.year AND --Have to join team to pitchers by specfic years
+    T.Wins >= 100 AND --Team wins over 100
+    PI.W = ( --Compares the pitcher to the most wins for a team
+        SELECT MAX(W) FROM PITCHING 
+        WHERE teamID = T.teamID AND
+            year = T.year); --Selects the max number of wins by a pitch for a given team
+
+--#3
+/*List all players to have more than 50 innings pitched (150 IPOuts)
+and more than 100 hits in the same season ordered by batting average */
+.www
+SELECT
+    P.nameFirst || ' ' || P.nameLast AS Name,
+    B.year AS year,
+    ROUND(PI.IPOuts / 3.0, 1) AS InningsPitched,
+    ROUND(1.0 * B.H / B.AB, 3) AS AVG
+FROM PLAYER P, PITCHING PI, BATTING B
+WHERE P.playerID = PI.playerID AND --Joins the player to the batting and pitching stats
+    P.playerID = B.playerID AND
+    B.year = PI.year AND --Makes sure stats are from same year
+    PI.IPOuts > 150 AND B.H > 100 --Filters players by requirements
+ORDER BY AVG DESC;
+
+--#4
+/* List all teams with multiple players to have less than 10 errors in the field
+ and more than 10 home runs in the same season */
+.www
+SELECT 
+    T.name AS Team,
+    T.year AS Year,
+    COUNT(DISTINCT F.playerID) AS numPlayers
+FROM PLAYER P, FIELDING F, BATTING B, TEAM T
+WHERE P.playerID = F.playerID AND --Joins the players to the fielding and batting stats
+    P.playerID = B.playerID AND
+    F.year = B.year AND --Makes sure stats are from the same season
+    F.teamID = B.teamID AND --Ensures the stats are for the same team
+    T.teamID = F.teamID AND
+    T.year = F.year AND --Ensures the team's year matches the stats
+    F.E <= 3 AND B.HR > 25 --Filters players by requirements
+GROUP BY T.teamID, T.name, F.year --Groups by team and year to get the number of players for each team
+HAVING numPlayers >= 3 --Ensures the "multiple players" requirement is met
+ORDER BY numPlayers DESC;
+
+--#5
+--List all players to steal more than 15 bases without being caught stealing ordered from highest to lowest
+.www
+SELECT 
+    P.nameFirst || ' ' || P.nameLast AS Name,
+    B.year,
+    B.SB
+FROM PLAYER P, BATTING B
+WHERE P.playerID = B.playerID AND --Joins the players to the batting stats
+    B.year >= 1951 AND --First year CS was an official stat to ensure players we not caught stealing
+    B.SB > 15 AND B.CS = 0 --Filters players by requirements
+GROUP BY P.playerID --Groups by player to ensure only one row per player
+ORDER BY B.SB DESC;
+
+--#6
+/*List the season with the most appearences for all players to make over 25 appearances 
+in both the outfield and pitcher in the same season ordered by batting averages in those seasons */
+.www
+SELECT
+    P.nameFIrst || ' ' || P.nameLast AS Name,
+    A.year,
+    A.G_P AS GamesPitched,
+    A.G_OF AS GamesOF,
+    ROUND(1.0* B.H / B.AB, 3) AS AVG
+FROM PLAYER P, APPEARANCES A, BATTING B
+WHERE P.playerID = A.playerID AND --Joins the players to the batting and appearances stats
+    P.playerID = B.playerID AND
+    B.year = A.year AND --Ensures the batting and appearances are from the same year
+    A.G_P > 25 AND A.G_OF > 25 --Filters players by requirements
+GROUP BY P.playerID
+ORDER BY AVG DESC;
+
+--#7
+/*List all current players born outside of the US with a batting average over .300 in a single season multiple times 
+and what their best season AVG was */
+.www
+SELECT 
+    AP.nameFIrst || ' ' || AP.nameLast AS Name,
+    AP.birthCountry,
+    ROUND(1.0* B.H / B.AB, 3) AS BestAVG,
+    COUNT(*) AS Instances --Number of seasons they hit over .300
+FROM ActivePlayers AP, BATTING B --Uses the current players veiw
+WHERE AP.playerID = B.playerID AND --Joins the players to the batting stats from the "ActivePlayers" view
+    NOT(AP.birthCountry = 'USA') AND --Filters players by country of birth outside of USA
+    ROUND(1.0* B.H / B.AB, 3) > 0.3 --AVG
+GROUP BY AP.playerID --Groups players who have multiple seasons hitting over .300
+HAVING INSTANCES > 1
+ORDER BY INSTANCES DESC, BestAvg DESC; --Ordered by number of times then Best Season AVG
+
+--#8
+--Select all players the are  either top 10 in BA as a hitter, top 10 in SO as a pitcher, or top 10 in Errors in the feild all time in their career while meeting minimum attempts
+.www
+SELECT 
+    P.nameFIrst || ' ' || P.nameLast AS Name,
+    ROUND(1.0* CB.H / CB.AB, 3) AS AVG,
+    CP.SO AS Strikeouts,
+    CF.E AS Errors
+FROM PLAYER P, CareerBatting CB, CareerFielding CF, CareerPitching CP --Uses the career views to get all time career stats
+WHERE 
+    (P.playerID IN ( --Top 10 in career BA
+        SELECT playerID FROM CareerBatting
+        WHERE AB > 250 --Sets minimum at bats requirement
+        ORDER BY ROUND(1.0* H / AB, 3) DESC, AB DESC --Gives top players that met requirements with priority to those with more at bats
+        LIMIT 10 )
+    OR P.playerID IN ( --Top 10 in career Errors
+        SELECT playerID FROM CareerFielding
+        WHERE InnOuts > 300 --Sets minimum innings requirement
+        ORDER BY E ASC, InnOuts DESC --Gives top players that met requirements with priority to those with more innings
+        LIMIT 10 )
+    OR P.playerID IN ( --Top 10 in career SO
+        SELECT playerID FROM CareerPitching
+        WHERE IPOuts > 300 --Sets minimum innings requirement
+        ORDER BY SO DESC, IPOuts ASC --Gives top players that met requirements with priority to those with more innings
+        LIMIT 10 ) ) AND
+    P.playerID = CB.playerID AND --Joins the players to the batting, pitching, and fielding stats
+    P.playerID = CF.playerID AND
+    P.playerID = CP.playerID
+ORDER BY P.nameLast, P.nameFirst; --Ordered by name since ordering by stats would be too messy
+
+--#9
+--List the height and weight of players who hit and throw with opposite hands with over 20 HRs, 100 H, 20 SBs and 150 Assists in a season 
+--"Five tool players" 
+.www
+SELECT 
+    P.nameFirst || ' ' || P.nameLast AS Name, 
+    (P.height / 12) || "' " || (P.height % 12) || '"' AS Height, --Turns hieght data into a more human friendly format
+    P.weight || "lbs" AS Weight, 
+    P.throws, 
+    P.bats, 
+    B.HR, 
+    B.H, 
+    B.SB, 
+    F.A 
+FROM PLAYER P, FIELDING F, BATTING B 
+WHERE NOT P.throws = P.bats AND --Ensures the player throws and bats with different hands
+    P.playerID = F.playerID AND --Joins the players to the fielding and batting stats
+    P.playerID = B.playerID AND 
+    B.year = F.year AND --Ensures the fielding and batting stats are from the same year
+    B.HR > 20 AND B.H > 150 AND B.SB > 20 AND F.A > 150 --Filters players by requirements
+GROUP BY P.playerID --Limits to one row per player
+ORDER BY P.hieght, P.weight, P.nameLast; --Orders players by size then name if same size
+
+--#10
+--List all players to ever hit 25 or more doubles, 5 or more triples, and 25 or more home runs in multiple seasons ordered by their length of carrer
+.www
+SELECT
+    P.nameFirst || ' ' || P.nameLast AS Name,
+    P.debut,
+    P.finalGame,
+    (P.finalGame - P.debut) || ' Years' AS CareerLength,
+    CB."2B" AS Career2B,
+    CB."3B" AS Career3B,
+    CB."HR" AS CareerHR
+FROM PLAYER P, BATTING B, CareerBatting CB --Uses season stats as criteria and career stats for output
+WHERE P.playerID = B.playerID AND --Joins the players to the batting stats
+    P.playerID = CB.playerID AND
+    B."2B" > 25 AND B."3B" > 5 AND B.HR > 25 --Filters players by requirements
+GROUP BY P.playerID --Groups players who have multiple seasons meeting the requirements
+HAVING COUNT(*) > 1
+ORDER BY (P.finalGame - P.debut) ASC, P.debut DESC; --Orders by length of career then debut date to get the longest careers first
