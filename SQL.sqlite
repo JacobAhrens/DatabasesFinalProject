@@ -19,6 +19,7 @@ SELECT
     P.nameFirst || ' ' || P.nameLast AS Name,
     PI.W AS "Pitcher Wins",
     T.name AS Team,
+    T.year AS Year,
     T.Wins || '-' || T.Losses AS "Team Record"
 FROM PLAYER P, TEAM T, PITCHING PI
 WHERE P.playerID = PI.playerID AND --Join pitchers and teams
@@ -28,7 +29,8 @@ WHERE P.playerID = PI.playerID AND --Join pitchers and teams
     PI.W = ( --Compares the pitcher to the most wins for a team
         SELECT MAX(W) FROM PITCHING 
         WHERE teamID = T.teamID AND
-            year = T.year); --Selects the max number of wins by a pitch for a given team
+            year = T.year) --Selects the max number of wins by a pitch for a given team
+ORDER BY PI.W DESC, T.Wins DESC; --Orders by most wins for the pitcher then team
 
 --#3
 /*List all players to have more than 50 innings pitched (150 IPOuts)
@@ -38,6 +40,7 @@ SELECT
     P.nameFirst || ' ' || P.nameLast AS Name,
     B.year AS year,
     ROUND(PI.IPOuts / 3.0, 1) AS InningsPitched,
+    B.H AS Hits,
     ROUND(1.0 * B.H / B.AB, 3) AS AVG
 FROM PLAYER P, PITCHING PI, BATTING B
 WHERE P.playerID = PI.playerID AND --Joins the player to the batting and pitching stats
@@ -146,27 +149,26 @@ WHERE
 ORDER BY P.nameLast, P.nameFirst; --Ordered by name since ordering by stats would be too messy
 
 --#9
---List the height and weight of players who hit and throw with opposite hands with over 20 HRs, 100 H, 20 SBs and 150 Assists in a season 
+--List the height and weight of players who have over 20 HRs, 100 H, 20 SBs and 150 Assists in a season 
 --"Five tool players" 
 .www
 SELECT 
     P.nameFirst || ' ' || P.nameLast AS Name, 
-    (P.height / 12) || "' " || (P.height % 12) || '"' AS Height, --Turns hieght data into a more human friendly format
-    P.weight || "lbs" AS Weight, 
+    (P.height / 12) || ''' ' || (P.height % 12) || '"' AS Height, --Turns hieght data into a more human friendly format
+    P.weight || 'lbs' AS Weight, 
     P.throws, 
     P.bats, 
     B.HR, 
     B.H, 
     B.SB, 
-    F.A 
+    F.A
 FROM PLAYER P, FIELDING F, BATTING B 
-WHERE NOT P.throws = P.bats AND --Ensures the player throws and bats with different hands
-    P.playerID = F.playerID AND --Joins the players to the fielding and batting stats
+WHERE P.playerID = F.playerID AND --Joins the players to the fielding and batting stats
     P.playerID = B.playerID AND 
     B.year = F.year AND --Ensures the fielding and batting stats are from the same year
     B.HR > 20 AND B.H > 150 AND B.SB > 20 AND F.A > 150 --Filters players by requirements
 GROUP BY P.playerID --Limits to one row per player
-ORDER BY P.hieght, P.weight, P.nameLast; --Orders players by size then name if same size
+ORDER BY P.height, P.weight, P.nameLast; --Orders players by size then name if same size
 
 --#10
 --List all players to ever hit 25 or more doubles, 5 or more triples, and 25 or more home runs in multiple seasons ordered by their length of carrer
