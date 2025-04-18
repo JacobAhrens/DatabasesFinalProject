@@ -1,5 +1,5 @@
 --#1
---List all players who have played for 10 or more franchises
+--List all players who have played for more than 10 franchises
 .www
 SELECT 
     P.nameFirst || ' ' || P.nameLast AS Name, 
@@ -9,7 +9,7 @@ WHERE P.playerID = A.playerID AND --Joins the player to franchise as "played for
     A.teamID = T.teamID AND 
     T.franchID = F.franchID 
 GROUP BY P.playerID --Groups all instance of player into one row
-HAVING Franchises >= 10  --Selects the players that have 10+ different franchises
+HAVING Franchises > 10  --Selects the players that have 10+ different franchises
 ORDER BY Franchises DESC;
 
 --#2
